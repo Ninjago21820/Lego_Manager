@@ -580,3 +580,6 @@ tr:hover .row-actions { opacity: 1; }
   .card { break-inside: avoid; box-shadow: none; }
   body { background: #fff; }
 }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 1s linear infinite; }

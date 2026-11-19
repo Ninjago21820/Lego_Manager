@@ -7,6 +7,7 @@ import {
   History,
   PieChart,
   Palette,
+  ScanLine,
   Settings as SettingsIcon,
   Plus,
   Menu,
@@ -24,6 +25,7 @@ import Movements from './views/Movements'
 import Reports from './views/Reports'
 import Settings from './views/Settings'
 import Colors from './views/Colors'
+import Scanner from './views/Scanner'
 import { fmt, eur, weight } from './lib/format'
 
 const NAV = [
@@ -32,6 +34,7 @@ const NAV = [
   { id: 'colors', label: 'Pièces & couleurs', icon: Palette, group: 'Inventaire' },
   { id: 'sets', label: 'Sets', icon: Package, group: 'Inventaire' },
   { id: 'locations', label: 'Emplacements', icon: Boxes, group: 'Inventaire' },
+  { id: 'scanner', label: 'Scanner photo', icon: ScanLine, group: 'Suivi' },
   { id: 'movements', label: 'Mouvements', icon: History, group: 'Suivi' },
   { id: 'reports', label: 'Rapports', icon: PieChart, group: 'Suivi' },
   { id: 'settings', label: 'Réglages', icon: SettingsIcon, group: 'Système' },
@@ -44,6 +47,7 @@ const TITLES = {
   sets: ['Sets', 'Votre collection de sets et leur progression'],
   locations: ['Emplacements', 'Où ranger et retrouver vos pièces'],
   movements: ['Mouvements', 'Historique des entrées et sorties de stock'],
+  scanner: ['Scanner photo', 'Reconnaître, compter et trier vos pièces à partir d’une photo'],
   reports: ['Rapports', 'Analyse de votre inventaire'],
   settings: ['Réglages', 'Préférences, sauvegarde et données'],
 }
@@ -94,6 +98,7 @@ export default function App() {
       sets: store.sets.length,
       locations: store.locations.length,
       movements: store.transactions.length,
+      scanner: null,
       reports: null,
       settings: null,
     }),
@@ -227,6 +232,7 @@ export default function App() {
             />
           )}
           {page === 'colors' && <Colors store={store} onConsume={notify} onNavigate={navigate} />}
+          {page === 'scanner' && <Scanner store={store} onConsume={notify} onNavigate={navigate} />}
           {page === 'sets' && (
             <Sets
               store={store}
