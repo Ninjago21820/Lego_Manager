@@ -52,3 +52,33 @@ export function toCSV(rows, headers) {
   for (const r of rows) lines.push(r.map(esc).join(';'))
   return '\uFEFF' + lines.join('\n')
 }
+
+const eurFmt = new Intl.NumberFormat('fr-FR', {
+  style: 'currency',
+  currency: 'EUR',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
+const eurFmtCompact = new Intl.NumberFormat('fr-FR', {
+  style: 'currency',
+  currency: 'EUR',
+  maximumFractionDigits: 0,
+})
+
+export const eur = (n) => eurFmt.format(Number(n) || 0)
+export const eurShort = (n) => eurFmtCompact.format(Number(n) || 0)
+
+/** Masse en grammes -> « 850 g », « 12,4 kg », « 1,2 t » */
+export function weight(grams) {
+  const g = Number(grams) || 0
+  if (g < 1000) return `${nf.format(Math.round(g * 10) / 10)} g`
+  if (g < 1000000) return `${(g / 1000).toFixed(g < 10000 ? 2 : 1).replace('.', ',')} kg`
+  return `${(g / 1000000).toFixed(2).replace('.', ',')} t`
+}
+
+/** Poids unitaire court : « 2,32 g » */
+export const weightUnit = (g) => `${nf.format(Math.round((Number(g) || 0) * 100) / 100)} g`
+
+/** Prix unitaire : « 0,18 € » */
+export const priceUnit = (n) => eurFmt.format(Number(n) || 0)

@@ -1,4 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  effectivePrice,
+  effectiveWeight,
+  guessPrice,
+  guessWeight,
+  partValue,
+  partWeight,
+  priceFactor,
+} from './catalog'
 
 const STORAGE_KEY = 'lego-manager:v1'
 
@@ -27,6 +36,8 @@ function seed() {
     locationId,
     condition: 'Neuf',
     note: '',
+    weightG: null,
+    pricePerPiece: null,
     createdAt: Date.now(),
     ...extra,
   })
@@ -55,8 +66,8 @@ function seed() {
     n('Pignon 12 dents', 'Technic', 'Gris foncé', 34, locTech),
     n('Pneu 43,2 x 22', 'Roue / Essieu', 'Noir', 16, locTech),
     n('Jante 30,4', 'Roue / Essieu', 'Chrome argent', 16, locTech),
-    n('Minifig astronaute', 'Minifig', 'Blanc', 3, locMinifig),
-    n('Minifig chevalier', 'Minifig', 'Gris foncé', 2, locMinifig),
+    n('Minifig complète', 'Minifig', 'Blanc', 3, locMinifig),
+    n('Minifig complète', 'Minifig', 'Gris foncé', 2, locMinifig),
     n('Tête minifig', 'Minifig', 'Jaune', 27, locMinifig),
     n('Torse minifig ville', 'Minifig', 'Bleu', 9, locMinifig),
     n('Jambes minifig', 'Minifig', 'Noir', 14, locMinifig),
@@ -156,7 +167,7 @@ function seed() {
     sets,
     locations,
     transactions,
-    settings: { lowStockThreshold: 10, currency: 'EUR' },
+    settings: { lowStockThreshold: 10, currency: 'EUR', usedPriceFactor: 0.7, valueBasis: 'estimate' },
   }
 }
 
@@ -171,7 +182,8 @@ function load() {
     const data = JSON.parse(raw)
     if (!data.parts || !data.sets || !data.locations) return seed()
     data.transactions ??= []
-    data.settings ??= { lowStockThreshold: 10, currency: 'EUR' }
+    data.settings ??= {}
+    data.settings = { lowStockThreshold: 10, currency: 'EUR', usedPriceFactor: 0.7, valueBasis: 'estimate', ...data.settings }
     return data
   } catch {
     return seed()
@@ -291,7 +303,7 @@ export function useStore() {
         sets: [],
         locations: [],
         transactions: [],
-        settings: { lowStockThreshold: 10, currency: 'EUR' },
+        settings: { lowStockThreshold: 10, currency: 'EUR', usedPriceFactor: 0.7, valueBasis: 'estimate' },
       }),
     [],
   )
@@ -303,7 +315,13 @@ export function useStore() {
       sets: data.sets ?? [],
       locations: data.locations ?? [],
       transactions: data.transactions ?? [],
-      settings: { lowStockThreshold: 10, currency: 'EUR', ...(data.settings ?? {}) },
+      settings: {
+        lowStockThreshold: 10,
+        currency: 'EUR',
+        usedPriceFactor: 0.7,
+        valueBasis: 'estimate',
+        ...(data.settings ?? {}),
+      },
     })
   }, [])
 
@@ -330,6 +348,75 @@ export function useStore() {
       byLocation[key] = (byLocation[key] || 0) + Number(p.quantity || 0)
     }
 
+    const usedFactor = Number(state.settings.usedPriceFactor ?? 0.7)
+
+    // Poids et valeur du stock de pieces
+    let totalWeightG = 0
+    let totalValue = 0
+    let manualValue = 0
+    let knownWeightQty = 0
+    for (const p of state.parts) {
+      totalWeightG += partWeight(p)
+      totalValue += partValue(p, usedFactor)
+      const explicit =
+        p.pricePerPiece !== null && p.pricePerPiece !== '' && Number.isFinite(Number(p.pricePerPiece))
+      if (explicit) manualValue += Number(p.quantity) * Number(p.pricePerPiece) * priceFactor(p, usedFactor)
+      if (Number(p.weightG) > 0) knownWeightQty += Number(p.quantity) || 0
+    }
+
+    // Matrice pieces x couleurs : quelles pieces je possede, en combien d'exemplaires
+    // et dans quelles couleurs.
+    const partMap = new Map()
+    for (const p of state.parts) {
+      const key = String(p.name || '').trim().toLowerCase()
+      if (!key) continue
+      if (!partMap.has(key)) {
+        partMap.set(key, {
+          name: p.name,
+          category: p.category,
+          colors: {},
+          total: 0,
+          weightG: 0,
+          value: 0,
+          refs: 0,
+        })
+      }
+      const row = partMap.get(key)
+      const qty = Number(p.quantity) || 0
+      const color = p.color || 'Inconnue'
+      row.colors[color] = (row.colors[color] || 0) + qty
+      row.total += qty
+      row.refs += 1
+      row.weightG += partWeight(p)
+      row.value += partValue(p, usedFactor)
+    }
+    const partVariants = [...partMap.values()].map((row) => {
+      const sorted = Object.entries(row.colors).sort((a, b) => b[1] - a[1])
+      return {
+        ...row,
+        variantCount: sorted.filter(([, q]) => q > 0).length,
+        topColor: sorted[0]?.[0] || '',
+      }
+    })
+    partVariants.sort((a, b) => b.total - a.total)
+
+    // Poids et valeur des sets renseignes manuellement
+    const setWeightG = state.sets.reduce((a, s) => a + Number(s.weightG || 0), 0)
+    const setExtraValue = state.sets.reduce((a, s) => a + Number(s.value || 0), 0)
+
+    // Repartition de la valeur par couleur et du poids par categorie
+    const valueByColor = {}
+    const weightByCategory = {}
+    for (const p of state.parts) {
+      const c = p.color || 'Inconnue'
+      valueByColor[c] = (valueByColor[c] || 0) + partValue(p, usedFactor)
+      weightByCategory[p.category] = (weightByCategory[p.category] || 0) + partWeight(p)
+    }
+
+    const mostValuable = [...state.parts]
+      .map((p) => ({ part: p, value: partValue(p, usedFactor), weightG: partWeight(p) }))
+      .sort((a, b) => b.value - a.value)
+
     return {
       totalParts,
       totalRefs,
@@ -343,6 +430,20 @@ export function useStore() {
       byColor,
       byLocation,
       locationsUsed: Object.keys(byLocation).filter((k) => k !== '__none__').length,
+      totalWeightG,
+      totalWeightKg: totalWeightG / 1000,
+      totalValue,
+      manualValue,
+      estimatedValue: Math.max(0, totalValue - manualValue),
+      knownWeightQty,
+      partVariants,
+      uniqueVariants: partVariants.length,
+      setWeightG,
+      setExtraValue,
+      totalValueAll: totalValue + setExtraValue,
+      valueByColor,
+      weightByCategory,
+      mostValuable: mostValuable.slice(0, 8),
     }
   }, [state])
 

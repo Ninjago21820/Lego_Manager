@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, Pencil, Trash2, Search } from 'lucide-react'
 import { LOCATION_TYPES, LOCATION_ICONS, colorHex } from '../lib/lego'
-import { fmt } from '../lib/format'
+import { fmt, eur, weight } from '../lib/format'
+import { partValue, partWeight } from '../lib/catalog'
 import { Modal, Confirm, Field, Empty } from '../components/ui'
 
 const emptyForm = { name: '', type: 'Boîte', place: '', note: '' }
@@ -45,12 +46,15 @@ export default function Locations({ store, addRequest, onAddHandled, onConsume, 
     setOpen(false)
   }
 
+  const usedFactor = Number(store.settings?.usedPriceFactor ?? 0.7)
   const enriched = useMemo(() => {
     const byLoc = {}
     for (const p of parts) {
       const k = p.locationId || '__none__'
-      if (!byLoc[k]) byLoc[k] = { qty: 0, refs: 0, colors: new Set(), topParts: [] }
+      if (!byLoc[k]) byLoc[k] = { qty: 0, refs: 0, colors: new Set(), topParts: [], weightG: 0, value: 0 }
       byLoc[k].qty += Number(p.quantity || 0)
+      byLoc[k].weightG += partWeight(p)
+      byLoc[k].value += partValue(p, usedFactor)
       byLoc[k].refs += 1
       byLoc[k].colors.add(p.color)
       byLoc[k].topParts.push(p)
@@ -59,6 +63,8 @@ export default function Locations({ store, addRequest, onAddHandled, onConsume, 
       ...l,
       qty: byLoc[l.id]?.qty || 0,
       refs: byLoc[l.id]?.refs || 0,
+      weightG: byLoc[l.id]?.weightG || 0,
+      value: byLoc[l.id]?.value || 0,
       colors: [...(byLoc[l.id]?.colors || [])].slice(0, 6),
       sets: sets.filter((s) => s.locationId === l.id).length,
       topParts: (byLoc[l.id]?.topParts || [])
@@ -69,7 +75,7 @@ export default function Locations({ store, addRequest, onAddHandled, onConsume, 
     return rows
       .filter((r) => !needle || `${r.name} ${r.place} ${r.note}`.toLowerCase().includes(needle))
       .sort((a, b) => b.qty - a.qty)
-  }, [locations, parts, sets, q])
+  }, [locations, parts, sets, q, usedFactor])
 
   const unassigned = parts.filter((p) => !p.locationId)
   const maxQty = Math.max(1, ...enriched.map((l) => l.qty))
@@ -149,11 +155,16 @@ export default function Locations({ store, addRequest, onAddHandled, onConsume, 
                   )}
                 </div>
 
-                <div className="bar-track" style={{ marginBottom: 10 }}>
+                <div className="bar-track" style={{ marginBottom: 8 }}>
                   <div
                     className="bar-fill"
                     style={{ width: `${Math.max(2, (l.qty / maxQty) * 100)}%`, background: 'var(--yellow)' }}
                   />
+                </div>
+
+                <div style={{ display: 'flex', gap: 12, fontSize: 11.5, marginBottom: 8, color: 'var(--muted)' }}>
+                  <span title="Poids des pièces rangées ici">⚖️ {weight(l.weightG)}</span>
+                  <span title="Valeur estimée du contenu">💶 {eur(l.value)}</span>
                 </div>
 
                 {l.refs > 0 && (

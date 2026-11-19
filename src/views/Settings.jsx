@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react'
-import { Download, Upload, RotateCcw, Trash2, Save, Moon, Sun, Info } from 'lucide-react'
+import { Download, Upload, RotateCcw, Trash2, Save, Moon, Sun, Info, Scale } from 'lucide-react'
 import { Field, Confirm } from '../components/ui'
 import { download } from '../lib/format'
 
 export default function Settings({ store, theme, setTheme, onConsume }) {
   const { settings, updateSettings, parts, sets, locations, transactions, resetDemo, clearAll, importData } = store
   const [threshold, setThreshold] = useState(settings.lowStockThreshold ?? 10)
+  const [usedFactor, setUsedFactor] = useState(Math.round((settings.usedPriceFactor ?? 0.7) * 100))
   const [confirmReset, setConfirmReset] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
   const [confirmDemo, setConfirmDemo] = useState(false)
@@ -65,6 +66,32 @@ export default function Settings({ store, theme, setTheme, onConsume }) {
                 </button>
               </div>
             </Field>
+            <Field
+              label="Décote des pièces d'occasion"
+              hint={`Les pièces marquées « Occasion » sont valorisées à ${usedFactor} % du prix neuf ; « Abîmé » à ${Math.round(usedFactor * 0.6)} %.`}
+            >
+              <div className="field-row">
+                <input
+                  className="input"
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={usedFactor}
+                  onChange={(e) => setUsedFactor(e.target.value)}
+                />
+                <span className="cell-muted">%</span>
+                <button
+                  className="btn"
+                  onClick={() => {
+                    const v = Math.min(100, Math.max(0, Number(usedFactor) || 0)) / 100
+                    updateSettings({ usedPriceFactor: v })
+                    onConsume(`Décote occasion définie à ${Math.round(v * 100)} %`)
+                  }}
+                >
+                  Appliquer
+                </button>
+              </div>
+            </Field>
             <Field label="Apparence">
               <div className="segmented" style={{ alignSelf: 'flex-start' }}>
                 <button className={theme === 'light' ? 'on' : ''} onClick={() => setTheme('light')}>
@@ -76,6 +103,32 @@ export default function Settings({ store, theme, setTheme, onConsume }) {
               </div>
             </Field>
           </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-head">
+          <Scale size={15} />
+          <h2>Comment sont calculés le poids et la valeur</h2>
+        </div>
+        <div className="card-body">
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.7, color: 'var(--muted)' }}>
+            <li>
+              <strong style={{ color: 'var(--text)' }}>Poids</strong> : masse unitaire de la pièce (g) × quantité.
+              L’application propose une estimation issue d’un référentiel de 60 pièces courantes ; vous pouvez la
+              remplacer par votre propre pesée dans la fiche de chaque pièce.
+            </li>
+            <li>
+              <strong style={{ color: 'var(--text)' }}>Valeur</strong> : prix unitaire (€) × quantité, avec décote
+              éventuelle selon l’état. Le prix par défaut vient du même référentiel (ordre de grandeur du neuf) et
+              peut être personnalisé pièce par pièce.
+            </li>
+            <li>
+              Les sets peuvent aussi porter un <strong style={{ color: 'var(--text)' }}>poids</strong> et une{' '}
+              <strong style={{ color: 'var(--text)' }}>valeur</strong> globale, additionnés au total de la collection
+              dans les rapports.
+            </li>
+          </ul>
         </div>
       </div>
 

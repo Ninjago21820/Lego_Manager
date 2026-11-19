@@ -11,7 +11,16 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import { CATEGORIES, COLORS, colorHex, isLightColor } from '../lib/lego'
-import { fmt, toCSV, download } from '../lib/format'
+import { fmt, toCSV, download, eur, weight, weightUnit, priceUnit } from '../lib/format'
+import {
+  effectivePrice,
+  effectiveWeight,
+  guessPrice,
+  guessWeight,
+  partValue,
+  partWeight,
+  priceFactor,
+} from '../lib/catalog'
 import { Modal, Confirm, Field, Empty } from '../components/ui'
 
 const CONDITIONS = ['Neuf', 'Occasion', 'Abîmé']
@@ -24,7 +33,11 @@ const emptyForm = {
   locationId: '',
   condition: 'Neuf',
   note: '',
+  weightG: '',
+  pricePerPiece: '',
 }
+
+const asNumberOrEmpty = (v) => (v === null || v === undefined ? '' : v)
 
 function ColorPicker({ value, onChange }) {
   return (
@@ -92,7 +105,16 @@ export default function Parts({ store, addRequest, onAddHandled, initialFilter, 
 
   function openForm(part) {
     setEditing(part)
-    setForm(part ? { ...emptyForm, ...part } : { ...emptyForm, locationId: locations[0]?.id || '' })
+    setForm(
+      part
+        ? {
+            ...emptyForm,
+            ...part,
+            weightG: asNumberOrEmpty(part.weightG),
+            pricePerPiece: asNumberOrEmpty(part.pricePerPiece),
+          }
+        : { ...emptyForm, locationId: locations[0]?.id || '' },
+    )
     setErrors({})
     setFormOpen(true)
   }
@@ -109,6 +131,8 @@ export default function Parts({ store, addRequest, onAddHandled, initialFilter, 
       ...form,
       name: form.name.trim(),
       quantity: Math.max(0, Math.round(Number(form.quantity) || 0)),
+      weightG: form.weightG === '' ? null : Math.max(0, Number(form.weightG) || 0),
+      pricePerPiece: form.pricePerPiece === '' ? null : Math.max(0, Number(form.pricePerPiece) || 0),
     }
     if (editing) {
       updatePart(editing.id, payload)
@@ -137,9 +161,19 @@ export default function Parts({ store, addRequest, onAddHandled, initialFilter, 
     })
 
     const dir = sort.dir === 'asc' ? 1 : -1
+    const usedFactor = Number(settings.usedPriceFactor ?? 0.7)
+    const valueOf = (p) => partValue(p, usedFactor)
     rows.sort((a, b) => {
       let av = a[sort.key]
       let bv = b[sort.key]
+      if (sort.key === 'weight') {
+        av = partWeight(a)
+        bv = partWeight(b)
+      }
+      if (sort.key === 'value') {
+        av = valueOf(a)
+        bv = valueOf(b)
+      }
       if (sort.key === 'location') {
         av = locations.find((l) => l.id === a.locationId)?.name || ''
         bv = locations.find((l) => l.id === b.locationId)?.name || ''
@@ -153,6 +187,11 @@ export default function Parts({ store, addRequest, onAddHandled, initialFilter, 
   }, [parts, q, cat, color, loc, stockFilter, sort, settings.lowStockThreshold, locations])
 
   const totalQty = filtered.reduce((a, p) => a + Number(p.quantity || 0), 0)
+  const usedFactor = Number(settings.usedPriceFactor ?? 0.7)
+  const totalWeight = filtered.reduce((a, p) => a + partWeight(p), 0)
+  const totalValue = filtered.reduce((a, p) => a + partValue(p, usedFactor), 0)
+  const grandWeight = parts.reduce((a, p) => a + partWeight(p), 0)
+  const grandValue = parts.reduce((a, p) => a + partValue(p, usedFactor), 0)
   const threshold = Number(settings.lowStockThreshold ?? 10)
   const maxQty = Math.max(1, ...parts.map((p) => Number(p.quantity) || 0))
   const locName = (id) => locations.find((l) => l.id === id)?.name || '—'
@@ -279,6 +318,8 @@ export default function Parts({ store, addRequest, onAddHandled, initialFilter, 
                     <SortTh label="Catégorie" k="category" />
                     <SortTh label="Couleur" k="color" />
                     <SortTh label="Quantité" k="quantity" />
+                    <SortTh label="Poids" k="weight" />
+                    <SortTh label="Valeur" k="value" />
                     <SortTh label="Emplacement" k="location" />
                     <th>État</th>
                     <th style={{ width: 150, textAlign: 'right' }}>Actions</th>
@@ -315,6 +356,12 @@ export default function Parts({ store, addRequest, onAddHandled, initialFilter, 
                               <i style={{ width: `${barW}%` }} />
                             </span>
                           </div>
+                        </td>
+                        <td className="num cell-muted" title={`${weightUnit(effectiveWeight(p))} la pièce`}>
+                          {weight(partWeight(p))}
+                        </td>
+                        <td className="num" style={{ fontWeight: 620 }} title={`${priceUnit(effectivePrice(p))} la pièce`}>
+                          {eur(partValue(p, usedFactor))}
                         </td>
                         <td className="cell-muted">{locName(p.locationId)}</td>
                         <td>
@@ -378,6 +425,17 @@ export default function Parts({ store, addRequest, onAddHandled, initialFilter, 
               <span>
                 <strong style={{ color: 'var(--text)' }}>{fmt(totalQty)}</strong> pièces au total
               </span>
+              <span>
+                <strong style={{ color: 'var(--text)' }}>{weight(totalWeight)}</strong> de plastique
+              </span>
+              <span>
+                <strong style={{ color: 'var(--text)' }}>{eur(totalValue)}</strong> de valeur estimée
+              </span>
+              {(totalQty !== parts.reduce((a, p) => a + Number(p.quantity || 0), 0)) && (
+                <span className="cell-muted">
+                  (inventaire complet : {weight(grandWeight)} · {eur(grandValue)})
+                </span>
+              )}
               {stockFilter !== 'low' && filtered.some((p) => Number(p.quantity) <= threshold) && (
                 <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 5, alignItems: 'center', color: 'var(--amber)' }}>
                   <AlertTriangle size={13} /> Certaines références sont sous le seuil de {threshold}
@@ -464,6 +522,61 @@ export default function Parts({ store, addRequest, onAddHandled, initialFilter, 
             <ColorPicker value={form.color} onChange={(c) => setForm({ ...form, color: c })} />
           </Field>
 
+          <Field
+            label="Poids unitaire (g)"
+            hint={`Estimation automatique : ${weightUnit(guessWeight(form.name, form.category))}`}
+          >
+            <div className="field-row">
+              <input
+                className="input"
+                type="number"
+                min={0}
+                step="0.01"
+                value={form.weightG}
+                placeholder={String(guessWeight(form.name, form.category))}
+                onChange={(e) => setForm({ ...form, weightG: e.target.value })}
+              />
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => setForm({ ...form, weightG: String(guessWeight(form.name, form.category)) })}
+                title="Utiliser l'estimation du référentiel"
+              >
+                Auto
+              </button>
+            </div>
+          </Field>
+
+          <Field
+            label="Prix unitaire (€)"
+            hint={`Estimation automatique : ${priceUnit(guessPrice(form.name, form.category, form.color))}`}
+          >
+            <div className="field-row">
+              <input
+                className="input"
+                type="number"
+                min={0}
+                step="0.01"
+                value={form.pricePerPiece}
+                placeholder={String(guessPrice(form.name, form.category, form.color))}
+                onChange={(e) => setForm({ ...form, pricePerPiece: e.target.value })}
+              />
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() =>
+                  setForm({
+                    ...form,
+                    pricePerPiece: String(guessPrice(form.name, form.category, form.color)),
+                  })
+                }
+                title="Utiliser l'estimation du référentiel"
+              >
+                Auto
+              </button>
+            </div>
+          </Field>
+
           <Field label="Note" span={2}>
             <textarea
               className="input"
@@ -473,6 +586,36 @@ export default function Parts({ store, addRequest, onAddHandled, initialFilter, 
               onChange={(e) => setForm({ ...form, note: e.target.value })}
             />
           </Field>
+
+          <div
+            className="span-2"
+            style={{
+              display: 'flex',
+              gap: 18,
+              flexWrap: 'wrap',
+              padding: '11px 14px',
+              borderRadius: 9,
+              background: 'var(--surface-2)',
+              border: '1px solid var(--border)',
+              fontSize: 12.5,
+            }}
+          >
+            <span className="cell-muted">Aperçu de la ligne :</span>
+            <span>
+              <strong>{weight((Number(form.quantity) || 0) * guessWeight(form.name, form.category))}</strong>{' '}
+              <span className="cell-muted">de plastique</span>
+            </span>
+            <span>
+              <strong>
+                {eur(
+                  (Number(form.quantity) || 0) *
+                    guessPrice(form.name, form.category, form.color) *
+                    (form.condition === 'Neuf' ? 1 : Number(settings.usedPriceFactor ?? 0.7)),
+                )}
+              </strong>{' '}
+              <span className="cell-muted">de valeur</span>
+            </span>
+          </div>
         </div>
       </Modal>
 

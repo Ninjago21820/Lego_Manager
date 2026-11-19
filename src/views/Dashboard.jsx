@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import {
   Blocks,
   Package,
+  Euro,
   AlertTriangle,
   Layers,
   Plus,
@@ -9,9 +10,12 @@ import {
   TrendingDown,
   CircleSlash,
   Boxes,
+  Scale,
+  Palette as PaletteIcon,
 } from 'lucide-react'
 import { CATEGORY_META, colorHex } from '../lib/lego'
-import { fmt, relDate } from '../lib/format'
+import { fmt, relDate, eur, weight } from '../lib/format'
+import { partWeight } from '../lib/catalog'
 import { Empty } from '../components/ui'
 
 function Stat({ label, value, foot, icon, accent }) {
@@ -102,6 +106,19 @@ export default function Dashboard({ store, onNavigate, onQuickAdd }) {
           value={fmt(stats.locationsUsed)}
           foot={locations.length ? `sur ${fmt(locations.length)} emplacements` : 'Aucun emplacement'}
           icon={<Boxes size={16} />}
+        />
+        <Stat
+          label="Poids du stock"
+          value={weight(stats.totalWeightG)}
+          foot={`soit ${((stats.totalWeightG || 0) / 1000).toFixed(1).replace('.', ',')} kg de plastique`}
+          icon={<Scale size={16} />}
+        />
+        <Stat
+          label="Valeur estimée"
+          value={eur(stats.totalValue)}
+          foot={`moyenne ${stats.totalParts ? eur(stats.totalValue / stats.totalParts) : eur(0)} / pièce`}
+          icon={<Euro size={16} />}
+          accent
         />
       </div>
 
@@ -260,6 +277,74 @@ export default function Dashboard({ store, onNavigate, onQuickAdd }) {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid-2">
+        <div className="card">
+          <div className="card-head">
+            <PaletteIcon size={15} />
+            <h2>Pièces & couleurs</h2>
+            <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => onNavigate('colors')}>
+              Matrice complète <ArrowRight size={13} />
+            </button>
+          </div>
+          <div className="card-body" style={{ display: 'grid', gap: 12 }}>
+            {stats.partVariants.slice(0, 5).map((r) => {
+              const entries = Object.entries(r.colors).sort((a, b) => b[1] - a[1])
+              return (
+                <div key={r.name} style={{ display: 'grid', gap: 5 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                    <strong style={{ fontSize: 12.5 }}>{r.name}</strong>
+                    <span className="cell-muted" style={{ fontSize: 11 }}>
+                      {r.variantCount} couleur{r.variantCount > 1 ? 's' : ''}
+                    </span>
+                    <span className="cell-muted num" style={{ marginLeft: 'auto', fontSize: 12 }}>
+                      {fmt(r.total)} ex. · {weight(r.weightG)} · {eur(r.value)}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', height: 10, borderRadius: 5, overflow: 'hidden', border: '1px solid var(--border)' }}>
+                    {entries.map(([name, qty]) => (
+                      <span
+                        key={name}
+                        style={{ width: `${(qty / r.total) * 100}%`, background: colorHex(name) }}
+                        title={`${name} : ${qty}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-head">
+            <Euro size={15} />
+            <h2>Où est ma valeur ?</h2>
+            <span className="hint" style={{ marginLeft: 'auto' }}>
+              top pièces
+            </span>
+          </div>
+          <div className="list">
+            {stats.mostValuable.slice(0, 6).map(({ part, value }) => (
+              <div className="list-row" key={part.id}>
+                <span className="swatch" style={{ background: colorHex(part.color) }} />
+                <div className="list-main">
+                  <div className="list-title">{part.name}</div>
+                  <div className="list-sub">
+                    {part.color} · {fmt(part.quantity)} ex. · {weight(partWeight(part))}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontWeight: 700, fontSize: 12.5 }}>{eur(value)}</div>
+                  <div className="cell-muted" style={{ fontSize: 10.5 }}>
+                    {stats.totalValue ? `${((value / stats.totalValue) * 100).toFixed(0)} %` : '—'}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>

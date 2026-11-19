@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Search, Plus, Pencil, Trash2, Package, Download } from 'lucide-react'
 import { SET_STATUSES, STATUS_META, THEMES } from '../lib/lego'
-import { fmt, toCSV, download } from '../lib/format'
+import { fmt, toCSV, download, eur } from '../lib/format'
 import { Modal, Confirm, Field, Empty } from '../components/ui'
 
 const emptyForm = {
@@ -14,6 +14,8 @@ const emptyForm = {
   status: 'Complet',
   locationId: '',
   note: '',
+  weightG: '',
+  value: '',
 }
 
 const statusTone = (s) => STATUS_META[s]?.tone ?? 'grey'
@@ -38,7 +40,16 @@ export default function Sets({ store, addRequest, onAddHandled, onConsume }) {
 
   function openForm(set) {
     setEditing(set)
-    setForm(set ? { ...emptyForm, ...set } : { ...emptyForm })
+    setForm(
+      set
+        ? {
+            ...emptyForm,
+            ...set,
+            weightG: set.weightG ?? '',
+            value: set.value ?? '',
+          }
+        : { ...emptyForm },
+    )
     setErrors({})
     setOpen(true)
   }
@@ -58,6 +69,8 @@ export default function Sets({ store, addRequest, onAddHandled, onConsume }) {
       year: Number(form.year) || '',
       pieces: Math.max(0, Number(form.pieces) || 0),
       builtPieces: Math.max(0, Number(form.builtPieces) || 0),
+      weightG: form.weightG === '' ? null : Math.max(0, Number(form.weightG) || 0),
+      value: form.value === '' ? null : Math.max(0, Number(form.value) || 0),
     }
     if (editing) {
       updateSet(editing.id, payload)
@@ -198,6 +211,7 @@ export default function Sets({ store, addRequest, onAddHandled, onConsume }) {
                   <th>Thème</th>
                   <th>Année</th>
                   <th>Pièces</th>
+                  <th style={{ textAlign: 'right' }}>Valeur</th>
                   <th style={{ minWidth: 170 }}>Montage</th>
                   <th>Statut</th>
                   <th>Emplacement</th>
@@ -227,6 +241,9 @@ export default function Sets({ store, addRequest, onAddHandled, onConsume }) {
                       <td><span className="badge grey">{s.theme}</span></td>
                       <td className="cell-muted num">{s.year || '—'}</td>
                       <td className="num">{fmt(s.pieces)}</td>
+                      <td className="num" style={{ textAlign: 'right' }}>
+                        {s.value ? <strong>{eur(s.value)}</strong> : <span className="cell-muted">—</span>}
+                      </td>
                       <td>
                         <div style={{ display: 'grid', gap: 4 }}>
                           <div className="progress">
@@ -344,6 +361,26 @@ export default function Sets({ store, addRequest, onAddHandled, onConsume }) {
               <option value="">Aucun</option>
               {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
+          </Field>
+          <Field label="Poids du set (g)" hint="Boîte comprise, si vous le connaissez.">
+            <input
+              className="input"
+              type="number"
+              min={0}
+              value={form.weightG}
+              placeholder="—"
+              onChange={(e) => setForm({ ...form, weightG: e.target.value })}
+            />
+          </Field>
+          <Field label="Valeur du set (€)" hint="Prix d'achat ou valeur estimée de la boîte complète.">
+            <input
+              className="input"
+              type="number"
+              min={0}
+              value={form.value}
+              placeholder="—"
+              onChange={(e) => setForm({ ...form, value: e.target.value })}
+            />
           </Field>
           <Field label="Note" span={2}>
             <textarea

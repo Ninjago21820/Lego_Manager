@@ -6,6 +6,7 @@ import {
   Boxes,
   History,
   PieChart,
+  Palette,
   Settings as SettingsIcon,
   Plus,
   Menu,
@@ -22,11 +23,13 @@ import Locations from './views/Locations'
 import Movements from './views/Movements'
 import Reports from './views/Reports'
 import Settings from './views/Settings'
-import { fmt } from './lib/format'
+import Colors from './views/Colors'
+import { fmt, eur, weight } from './lib/format'
 
 const NAV = [
   { id: 'dashboard', label: 'Tableau de bord', icon: LayoutDashboard, group: 'Vue d’ensemble' },
   { id: 'parts', label: 'Pièces', icon: Blocks, group: 'Inventaire' },
+  { id: 'colors', label: 'Pièces & couleurs', icon: Palette, group: 'Inventaire' },
   { id: 'sets', label: 'Sets', icon: Package, group: 'Inventaire' },
   { id: 'locations', label: 'Emplacements', icon: Boxes, group: 'Inventaire' },
   { id: 'movements', label: 'Mouvements', icon: History, group: 'Suivi' },
@@ -37,6 +40,7 @@ const NAV = [
 const TITLES = {
   dashboard: ['Tableau de bord', 'Vue d’ensemble de votre collection LEGO'],
   parts: ['Pièces', 'Inventaire détaillé de vos pièces'],
+  colors: ['Pièces & couleurs', 'Combien d’exemplaires de chaque pièce, et dans quelles couleurs'],
   sets: ['Sets', 'Votre collection de sets et leur progression'],
   locations: ['Emplacements', 'Où ranger et retrouver vos pièces'],
   movements: ['Mouvements', 'Historique des entrées et sorties de stock'],
@@ -86,6 +90,7 @@ export default function App() {
     () => ({
       dashboard: null,
       parts: store.parts.length,
+      colors: store.stats.uniqueVariants,
       sets: store.sets.length,
       locations: store.locations.length,
       movements: store.transactions.length,
@@ -184,7 +189,17 @@ export default function App() {
             <div className="sub">{sub}</div>
           </div>
           <div className="topbar-actions">
-            <span className="chip" style={{ fontSize: 11.5 }}>
+            <span className="chip hide-sm" style={{ fontSize: 11.5 }} title="Poids total du stock de pièces">
+              ⚖️ {weight(store.stats.totalWeightG)}
+            </span>
+            <span
+              className="chip"
+              style={{ fontSize: 11.5, background: 'var(--yellow-soft)', borderColor: '#f0e2a8', color: '#8a6d00' }}
+              title="Valeur estimée du stock (voir Pièces & couleurs)"
+            >
+              💶 {eur(store.stats.totalValue)}
+            </span>
+            <span className="chip hide-sm" style={{ fontSize: 11.5 }}>
               <Blocks size={12} /> {fmt(store.stats.totalParts)} pièces
             </span>
             <button
@@ -211,6 +226,7 @@ export default function App() {
               onConsume={notify}
             />
           )}
+          {page === 'colors' && <Colors store={store} onConsume={notify} onNavigate={navigate} />}
           {page === 'sets' && (
             <Sets
               store={store}
